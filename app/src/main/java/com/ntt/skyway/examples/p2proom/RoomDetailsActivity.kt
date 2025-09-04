@@ -34,6 +34,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
+import org.opencv.android.Utils
+import org.opencv.core.Mat
+import org.opencv.core.Size
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -314,20 +317,25 @@ class RoomDetailsActivity : AppCompatActivity() {
         @SuppressLint("UnsafeExperimentalUsageError")
         override fun analyze(image: ImageProxy) {
             scope.launch(Dispatchers.Main) {
-                //nv21 = interpriterKt?.process(image, 2)
-                //bmp = getBitmapImageFromYUV(nv21, image.height, image.width)
-                //bmp = interpriterKt?.processBitmap(image, 2)
-                bmp = interpriterKt?.processPixelPlateBlur(image, 2)
-                bmp?.let {
-                    this@RoomDetailsActivity.runOnUiThread {
-                        binding.imageView.setImageBitmap(it)
+                val mediaImage = image.image
+                val bitmap = mediaImage?.toBitmap()
+
+                bitmap?.let {
+                    val mat = Mat()
+                    Utils.bitmapToMat(it, mat)
+
+                    val processed = interpriter?.processMat(mat, 2)
+
+                    processed?.let { result ->
+                        binding.imageView.setImageBitmap(result)
+                        source.updateFrame(result, 0)
                     }
-                    source.updateFrame(it, 0)
                 }
 
                 image.close()
             }
         }
+
     }
 
 
@@ -343,11 +351,12 @@ class RoomDetailsActivity : AppCompatActivity() {
         imageAnalysis = ImageAnalysis.Builder().build()
         imageAnalysis!!.setAnalyzer(Executors.newSingleThreadExecutor(),MyImageAnalyzeKt())
 
-        /*imageAnalysis = ImageAnalysis.Builder()
+        imageAnalysis = ImageAnalysis.Builder()
             // enable the following line if RGBA output is needed.
-            // .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-            //.setTargetResolution(Size(480, 640))
-            //.setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+//            .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+            .setTargetResolution(android.util.Size(480, 620))
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build().apply {
             setAnalyzer(Executors.newSingleThreadExecutor(), MyImageAnalyzer {
 
@@ -366,7 +375,7 @@ class RoomDetailsActivity : AppCompatActivity() {
                 }
 
             })
-        }*/
+        }
 
         val context: Context = this@RoomDetailsActivity
         //val context: Context = this@RoomDetailsActivity.applicationContext
@@ -374,16 +383,24 @@ class RoomDetailsActivity : AppCompatActivity() {
         cameraProviderFuture.addListener({
                 val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
 
-                preview = Preview.Builder().build().also{
-                    it.setSurfaceProvider(binding.localRenderer?.surfaceProvider)
+                preview = Preview.Builder()
+//                    .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                    .setTargetResolution(android.util.Size(480, 620))
+                    .setTargetRotation(binding.localRenderer.display.rotation)
+                    .build().also{
+                    it.setSurfaceProvider(binding.localRenderer.surfaceProvider)
                 }
 
                 try{
                     // clear all the previous use cases first.
                     cameraProvider.unbindAll()
 
-                   // imageAnalysis = ImageAnalysis.Builder().build()
-                    //imageAnalysis?.setAnalyzer(cameraExecutor, MyImageAnalyzer())
+                    imageAnalysis = ImageAnalysis.Builder()
+//                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                        .setTargetResolution(android.util.Size(480, 620))
+                        .setTargetRotation(binding.localRenderer.display.rotation)
+                        .build()
+                    imageAnalysis?.setAnalyzer(cameraExecutor, MyImageAnalyzeKt())
                     camera = cameraProvider.bindToLifecycle(
                         this,
                         cameraSelector,
